@@ -1,0 +1,93 @@
+SELECT
+  table_name,
+  column_name,
+  constraint_name,
+  referenced_table_name,
+  referenced_column_name
+FROM information_schema.key_column_usage
+WHERE table_schema = 'shadow'
+      AND referenced_column_name IS NOT NULL;
+
+DESCRIBE information_schema.key_column_usage;
+
+# SHOW TABLES;
+# SHOW INDEX FROM <table>;
+# DROP TABLE IF EXISTS <table>;
+
+
+CREATE TABLE user (
+  id    INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(500) NOT NULL UNIQUE
+);
+
+# obj := gen.WantTable("objective", "Objectives")
+# obj.HasField("capability", "Capability to achieve by the end", "", gen.TEXT, true)
+# obj.RelateWith(gen.User, "owner", false)
+
+CREATE TABLE objective (
+  id         INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  capability VARCHAR(500) NOT NULL,
+  owner_id   INT UNSIGNED,
+
+  INDEX (capability),
+  FOREIGN KEY (owner_id) REFERENCES user (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+);
+
+# kr := gen.WantTable("key_result", "Key Results")
+# kr.HasField("key_result", "Deliverable which determine achievement of the objective", "", gen.TEXT, true)
+# kr.HasField("prob_of_success", "Probability of success", "%", gen.INT, true)
+# kr.HasField("achievement", "Achievement", "%", gen.INT, true)
+# kr.HasField("retro", "Retrospective notes", "", gen.TEXT, false)
+# kr.RelateWith(obj, "obj", false)
+
+
+CREATE TABLE key_result (
+  id              INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  key_result      VARCHAR(500) NOT NULL UNIQUE,
+  prob_of_success INT          NOT NULL,
+  achievement     INT          NOT NULL,
+  retro           VARCHAR(500),
+  obj_id          INT UNSIGNED,
+
+  INDEX (prob_of_success),
+  INDEX (achievement),
+  INDEX (retro),
+  FOREIGN KEY (obj_id) REFERENCES objective (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+);
+
+# ki := gen.WantTable("key_init", "Key Initiatives")
+# ki.HasField("key_init", "Initiative which is needed to deliver key result", "", gen.TEXT, true)
+# ki.RelateWith(kr, "kr", false)
+# ki.RelateWith(obj, "obj", false).Field().Unique()
+
+CREATE TABLE key_init (
+  id       INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  key_init VARCHAR(500) NOT NULL,
+  kr_id    INT UNSIGNED,
+  obj_id   INT UNSIGNED UNIQUE,
+
+  FOREIGN KEY (kr_id) REFERENCES key_result (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  FOREIGN KEY (obj_id) REFERENCES objective (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+);
+
+# ALTER TABLE key_init
+#   DROP INDEX obj_id,
+#   DROP INDEX kr_id;
+# DROP FOREIGN KEY key_init_ibfk_1;
+
+# ALTER TABLE key_init
+#   ADD FOREIGN KEY (kr_id) REFERENCES key_result (id);
+
+# itsp := gen.WantTable("itsp", "IT Strategic Plan")
+# itsp.HasField("init", "Initiative to execute", "", gen.TEXT, true)
+# itsp.RelateWith(gen.User, "emit", false)
+#
+# gen.ManyToManyRelationship("ki_itsp", ki, itsp)
