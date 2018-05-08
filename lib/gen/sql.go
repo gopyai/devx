@@ -3,7 +3,6 @@ package gen
 import (
 	"database/sql"
 	"fmt"
-	"log"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -13,7 +12,7 @@ func sqlOpen(dbName, dbUser, dbPass string) (*sql.DB, error) {
 }
 
 func sqlExec(conn *sql.DB, q string) error {
-	log.Printf("Will execute query:\n%s\n", q)
+	fmt.Printf("Will execute query:\n%s\n", q)
 	_, err := conn.Exec(q)
 	return err
 }

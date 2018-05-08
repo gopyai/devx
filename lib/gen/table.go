@@ -2,7 +2,6 @@ package gen
 
 import (
 	"fmt"
-	"log"
 )
 
 type (
@@ -36,8 +35,8 @@ type (
 	}
 
 	Select struct {
-		*Join
-		query string
+		from *Table
+		j    *Join
 	}
 
 	ManyToManyRelation struct {
@@ -56,28 +55,27 @@ type (
 	}
 
 	joinType byte
+
+	joinQuery struct {
+		q string
+	}
 )
 
 const (
 	TEXT         FieldType = iota
-	INT
-	DATE
-	relationship
+	INT          
+	DATE         
+	relationship 
 )
 
 const (
 	leftJoin  joinType = iota
-	rightJoin
+	rightJoin 
 )
 
 const (
 	INDEX  IndexType = iota
-	UNIQUE
-)
-
-var (
-	tables  []*Table
-	selects []*Select
+	UNIQUE 
 )
 
 //
@@ -126,14 +124,30 @@ func (my *Table) Unique(f ...*Field) error {
 	return nil
 }
 
-func (my *Table) Select(name string) *Join {
-	s := &Select{query: name, Join: &Join{ref: my, name: my.name}}
-	selects = append(selects, s)
-	return s.Join
+func (my *Table) Select() *Select {
+	return &Select{from: my}
 }
 
 //
 // Select
+//
+
+func (my *Select) J() *Join {
+	my.j = &Join{ref: my.from, name: my.from.name}
+	return my.j
+}
+
+func (my *Select) Query() string {
+	j := my.j
+	q := &joinQuery{q: fmt.Sprintf("SELECT * FROM %s\n", j.name)}
+	for _, c := range j.childs {
+		q.composeJoin(c)
+	}
+	return q.q
+}
+
+//
+// Join
 //
 
 func (my *Join) doJoin(j *Join, t joinType) {
@@ -141,6 +155,15 @@ func (my *Join) doJoin(j *Join, t joinType) {
 	if j.Err != nil {
 		my.Err = j.Err
 	}
+
+	// Only accept *Relation for j
+	switch j.ref.(type) {
+	case *Relation:
+	default:
+		my.Err = fmt.Errorf("j parameter must be originating from *Relation")
+		return
+	}
+
 	// Return early for error
 	if my.Err != nil {
 		return
@@ -159,7 +182,7 @@ func (my *Join) doJoin(j *Join, t joinType) {
 	rel := j.ref.(*Relation)
 	if parentTableName != rel.tbl.name {
 		my.Err = fmt.Errorf("error join using unmatched relationship")
-		log.Println(my.Err)
+		fmt.Println(my.Err)
 	}
 
 	// Create the child
@@ -178,10 +201,10 @@ func (my *Join) RightJoin(j *Join) *Join {
 }
 
 //
-// Relationship
+// Relation
 //
 
-func (my *Relation) Join() *Join {
+func (my *Relation) J() *Join {
 	return &Join{ref: my}
 }
 
@@ -199,4 +222,32 @@ func WantManyToManyRelationTable(tblName, tblDesc string, relInfo []*ManyToManyR
 		tables = tables[:len(tables)-1] // Remove last table entry if error, to cancer table creation
 	}
 	return
+}
+
+func (q *joinQuery) composeJoin(j *join) {
+	j.self.name = fmt.Sprintf("%s_%s",
+		j.parent.name, j.self.ref.(*Relation).name)
+
+	switch j.type_ {
+	case leftJoin:
+		q.q += "LEFT JOIN"
+	case rightJoin:
+		q.q += "RIGHT JOIN"
+	default:
+		panic(fmt.Errorf("error join type"))
+	}
+
+	selfRef := j.self.ref.(*Relation)
+
+	q.q += fmt.Sprintf(" %s %s ON %s.%s_id=%s.id\n",
+		selfRef.relateWith.name,
+		j.self.name,
+		j.parent.name,
+		selfRef.name,
+		j.self.name,
+	)
+
+	for _, c := range j.self.childs {
+		q.composeJoin(c)
+	}
 }

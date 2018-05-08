@@ -1,7 +1,8 @@
 package gen
 
+// Predefined tables
+
 var (
-	// Predefined tables
 	User     *Table
 	UserRole *Table
 )

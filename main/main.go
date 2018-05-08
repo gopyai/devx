@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/gopyai/devx/lib/flow"
@@ -12,76 +11,21 @@ import (
 func main() {
 	// def1()
 	// def2()
-	def3()
+	// def3()
 
-	log.Println("Error:", gen.GenerateForMySQL("shadow", "shadow", "shadow"))
-	log.Println("Error:", gen.GenerateGo())
+	// panicIf(gen.GenerateForMySQL("shadow", "shadow", "shadow"))
+	// panicIf(gen.GenerateGo())
 
 	// defineFlow()
 }
 
-func def3() {
-	obj := gen.WantTable("objective", "Objectives")
-	obj.HasField("capability", "Capability to achieve by the end", "", gen.TEXT, true, gen.UNIQUE)
-	obj.RelateWith(gen.User, "owner", "", false, gen.INDEX)
-
-	obj.Select("hello")
-}
-
 func def1() {
-	/*
-	CREATE TABLE email (
-		id    INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		email VARCHAR(500) NOT NULL UNIQUE
-	);
-
-	INSERT INTO email (email) VALUES ('arief@btpn');
-	INSERT INTO email (email) VALUES ('ana@home');
-	*/
-
 	email := gen.WantTable("email", "")
 	email.HasField("email", "", "", gen.TEXT, true, gen.UNIQUE)
-
-	/*
-	CREATE TABLE usr (
-		id       INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		name     VARCHAR(500) NOT NULL,
-		email_id INT UNSIGNED,
-
-		INDEX (name),
-		FOREIGN KEY (email_id) REFERENCES email (id)
-			ON DELETE CASCADE
-			ON UPDATE CASCADE
-	);
-
-	INSERT INTO usr (name, email_id) VALUES ('arief', 1);
-	INSERT INTO usr (name, email_id) VALUES ('ana', 2);
-	*/
 
 	usr := gen.WantTable("usr", "")
 	usr.HasField("name", "", "", gen.TEXT, true, gen.INDEX)
 	usrEmail := usr.RelateWith(email, "email", "", false, gen.UNIQUE)
-
-	/*
-	CREATE TABLE objective (
-		id         INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-		objective  VARCHAR(500) NOT NULL,
-		owner_id   INT UNSIGNED,
-		manager_id INT UNSIGNED,
-
-		INDEX (objective),
-		FOREIGN KEY (owner_id) REFERENCES usr (id)
-			ON DELETE CASCADE
-			ON UPDATE CASCADE,
-		FOREIGN KEY (manager_id) REFERENCES usr (id)
-			ON DELETE CASCADE
-			ON UPDATE CASCADE
-	);
-
-	INSERT INTO objective (objective, owner_id, manager_id) VALUES ('Bekerja', 1, 2);
-	INSERT INTO objective (objective, owner_id, manager_id) VALUES ('Mendidik', 2, 2);
-
-	*/
 
 	obj := gen.WantTable("objective", "")
 	obj.HasField("objective", "", "", gen.TEXT, true, gen.INDEX)
@@ -89,20 +33,10 @@ func def1() {
 	objManager := obj.RelateWith(usr, "manager", "", false, gen.INDEX)
 	obj.Unique(objOwner.Field, objManager.Field)
 
-	/*
-	SELECT *
-		FROM objective
-
-	LEFT JOIN usr obj_owner on objective.owner_id = obj_owner.id
-	LEFT JOIN email obj_owner_email on obj_owner.email_id = obj_owner_email.id
-
-	LEFT JOIN usr obj_mgr on objective.manager_id = obj_mgr.id
-	LEFT JOIN email obj_mgr_email on obj_mgr.email_id = obj_mgr_email.id
-	*/
-
-	panicIf(obj.Select("ObjOwnerManager").
-		LeftJoin(objOwner.Join().LeftJoin(usrEmail.Join())).
-		LeftJoin(objManager.Join().LeftJoin(usrEmail.Join())).Err)
+	s := obj.Select()
+	s.J().
+		LeftJoin(objOwner.J().LeftJoin(usrEmail.J())).
+		LeftJoin(objManager.J().LeftJoin(usrEmail.J()))
 }
 
 func def2() {
@@ -133,6 +67,16 @@ func def2() {
 	panicIf(err)
 
 	// Define query
+}
+
+func def3() {
+	obj := gen.WantTable("objective", "Objectives")
+	obj.HasField("capability", "Capability to achieve by the end", "", gen.TEXT, true, gen.UNIQUE)
+	objOwner := obj.RelateWith(gen.User, "owner", "", false, gen.INDEX)
+
+	s := obj.Select()
+	s.J().LeftJoin(objOwner.J())
+	fmt.Println(s.Query())
 }
 
 func defineFlow() {
