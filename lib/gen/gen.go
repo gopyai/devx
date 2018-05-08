@@ -2,75 +2,150 @@ package gen
 
 import (
 	"fmt"
+	"log"
+)
+
+type (
+	joinQuery struct {
+		q string
+	}
+)
+
+var (
+	dataTypes = map[FieldType]string{
+		TEXT: "VARCHAR(500)",
+		INT:  "INT",
+		DATE: "DATE",
+	}
 )
 
 func GenerateForMySQL(dbName, dbUser, dbPass string) error {
-	for _, t := range tables {
-		fmt.Println("create table:", t.name)
-		fmt.Println("id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY")
-		for _, f := range t.fields {
-			fmt.Print(f.name)
-			switch f.type_ {
-			case TEXT:
-				fmt.Print(" varchar(500)")
-			case INT:
-				fmt.Print(" int")
+	conn, err := sqlOpen(dbName, dbUser, dbPass)
+	if err != nil {
+		return err
+	}
+
+	type (
+		forKey struct {
+			colName  string
+			relTable string
+		}
+	)
+	for _, tbl := range tables {
+		log.Println("Table:", tbl.name)
+
+		// Start create table query
+		q := fmt.Sprintf("CREATE TABLE %s(\nid INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,\n", tbl.name)
+
+		var needIndex []string
+		var needForeign []forKey
+
+		// Define each column
+		for _, field := range tbl.fields {
+			log.Println("Field:", field.name)
+
+			// Data type
+			pre := " "
+			var dataType string
+			isRelationship := false
+			switch t := field.type_; t {
 			case relationship:
-				fmt.Print("_id int unsigned, relationship with ", f.relateWith.name, "(id)")
+				pre = "_id "
+				dataType = "INT UNSIGNED"
+				isRelationship = true
+				needForeign = append(needForeign, forKey{field.name, field.relateWith.name})
 			default:
-				panic("TODO")
+				dataType = dataTypes[t]
+				if len(dataTypes) == 0 {
+					panic(fmt.Errorf("error field type %d", t))
+				}
+			}
+			q += field.name + pre + dataType
+
+			// Not null
+			if field.isNotNull {
+				q += " NOT NULL"
 			}
 
-			if f.isNotNull {
-				fmt.Print(" not null")
+			// Index type
+			if field.index == UNIQUE {
+				q += " UNIQUE"
+			} else if !isRelationship {
+				needIndex = append(needIndex, field.name) // Pending index definition
 			}
-
-			if f.isUnique {
-				fmt.Print(" unique")
-			}
-
-			fmt.Println()
+			q += ",\n"
 		}
-		fmt.Println("###")
+
+		// Define unique
+		for _, u := range tbl.uniques {
+			s := ""
+			for i, f := range u {
+				if i > 0 {
+					s += ","
+				}
+				s += f.name
+				switch f.type_ {
+				case relationship:
+					s += "_id"
+				}
+			}
+			q += fmt.Sprintf("UNIQUE(%s),\n", s)
+		}
+
+		// Define index
+		for _, colName := range needIndex {
+			q += fmt.Sprintf("INDEX(%s),\n", colName)
+		}
+
+		// Define foreign key
+		for _, foreign := range needForeign {
+			q += fmt.Sprintf("FOREIGN KEY (%s_id) REFERENCES %s(id) ON DELETE CASCADE ON UPDATE CASCADE,\n",
+				foreign.colName,
+				foreign.relTable)
+		}
+
+		// Closing
+		q = q[:len(q)-2] + "\n)"
+
+		// Execute sql
+		if err := sqlExec(conn, q); err != nil {
+			return err
+		}
 	}
 
+	// TODO this query should be applicable for generated go file
 	for _, s := range selects {
-		fmt.Print(s.query, " => ")
 		j := s.Join
-		fmt.Println("SELECT FROM", j.name)
+		q := &joinQuery{q: fmt.Sprintf("SELECT * FROM %s\n", j.name)}
 		for _, c := range j.childs {
-			composeJoin(c)
+			q.composeJoin(c)
 		}
-		fmt.Println("###")
+		log.Printf("Query: %s\n%s\n", s.query, q.q)
 	}
 
-	return nil // TODO
+	return nil
 }
 
-func composeJoin(j *join) {
+func GenerateGo() error {
+	return fmt.Errorf("TODO") // TODO
+}
+
+func (q *joinQuery) composeJoin(j *join) {
 	j.self.name = fmt.Sprintf("%s_%s",
-		j.parent.name, j.self.ref.(*Relationship).name)
+		j.parent.name, j.self.ref.(*Relation).name)
 
 	switch j.type_ {
 	case leftJoin:
-		fmt.Print("LEFT JOIN")
+		q.q += "LEFT JOIN"
 	case rightJoin:
-		fmt.Print("RIGHT JOIN")
+		q.q += "RIGHT JOIN"
 	default:
-		panic("TODO")
+		panic(fmt.Errorf("error join type"))
 	}
 
-	parentRef := j.parent.ref
-	switch parentRef.(type) {
-	case (*Table):
-	case (*Relationship):
-	default:
-		panic("TODO")
-	}
+	selfRef := j.self.ref.(*Relation)
 
-	selfRef := j.self.ref.(*Relationship)
-
-	fmt.Printf(" %s %s ON %s.%s_id=%s.id\n",
+	q.q += fmt.Sprintf(" %s %s ON %s.%s_id=%s.id\n",
 		selfRef.relateWith.name,
 		j.self.name,
 		j.parent.name,
@@ -79,13 +154,6 @@ func composeJoin(j *join) {
 	)
 
 	for _, c := range j.self.childs {
-		composeJoin(c)
+		q.composeJoin(c)
 	}
-
 }
-
-func GenerateGo() error {
-	return nil // TODO
-}
-
-
